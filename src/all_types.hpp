@@ -1612,6 +1612,8 @@ enum BuiltinFnId {
     BuiltinFnIdIntType,
     BuiltinFnIdVectorType,
     BuiltinFnIdShuffle,
+    BuiltinFnIdGather,
+    BuiltinFnIdScatter,
     BuiltinFnIdSplat,
     BuiltinFnIdSetCold,
     BuiltinFnIdSetRuntimeSafety,
@@ -1732,6 +1734,7 @@ enum ZigLLVMFnId {
     ZigLLVMFnIdClz,
     ZigLLVMFnIdPopCount,
     ZigLLVMFnIdOverflowArithmetic,
+    ZigLLVMFnIdMaskedVector,
     ZigLLVMFnIdFMA,
     ZigLLVMFnIdFloatOp,
     ZigLLVMFnIdBswap,
@@ -1777,6 +1780,13 @@ struct ZigLLVMFnKey {
         struct {
             uint32_t bit_count;
         } bit_reverse;
+        struct {
+            BuiltinFnId op;
+            uint32_t bit_count;
+            bool is_float;
+            bool is_pointer;
+            uint32_t vector_len;
+        } masked_vector;
     } data;
 };
 
@@ -2432,6 +2442,8 @@ enum IrInstructionId {
     IrInstructionIdIntType,
     IrInstructionIdVectorType,
     IrInstructionIdShuffleVector,
+    IrInstructionIdGather,
+    IrInstructionIdScatter,
     IrInstructionIdSplat,
     IrInstructionIdBoolNot,
     IrInstructionIdMemset,
@@ -3704,6 +3716,35 @@ struct IrInstructionShuffleVector {
     IrInstruction *a;
     IrInstruction *b;
     IrInstruction *mask; // This is in zig-format, not llvm format
+};
+
+// scatter and gather had to be split because scatter
+// has side effects and gather does not
+struct IrInstructionMaskedVector {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
+};
+
+struct IrInstructionGather {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
+};
+
+struct IrInstructionScatter {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
 };
 
 struct IrInstructionSplat {
