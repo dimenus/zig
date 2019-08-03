@@ -1542,7 +1542,7 @@ static LLVMValueRef gen_widen_or_shorten(CodeGen *g, bool want_runtime_safety, Z
         if (actual_scalar_type->id == ZigTypeIdFloat) {
             return LLVMBuildFPExt(g->builder, expr_val, get_llvm_type(g, wanted_type), "");
         } else if (actual_scalar_type->id == ZigTypeIdInt) {
-            if (actual_type->data.integral.is_signed) {
+            if (actual_scalar_type->data.integral.is_signed) {
                 return LLVMBuildSExt(g->builder, expr_val, get_llvm_type(g, wanted_type), "");
             } else {
                 return LLVMBuildZExt(g->builder, expr_val, get_llvm_type(g, wanted_type), "");
@@ -2932,7 +2932,7 @@ static LLVMValueRef ir_render_bin_op(CodeGen *g, IrExecutable *executable,
         case IrBinOpBitShiftLeftExact:
             {
                 assert(scalar_type->id == ZigTypeIdInt);
-                LLVMValueRef op2_casted = gen_widen_or_shorten(g, false, op2->value.type, scalar_type, op2_value);
+                LLVMValueRef op2_casted = gen_widen_or_shorten(g, false, op2->value.type, operand_type, op2_value);
                 bool is_sloppy = (op_id == IrBinOpBitShiftLeftLossy);
                 if (is_sloppy) {
                     return LLVMBuildShl(g->builder, op1_value, op2_casted, "");
@@ -2948,7 +2948,7 @@ static LLVMValueRef ir_render_bin_op(CodeGen *g, IrExecutable *executable,
         case IrBinOpBitShiftRightExact:
             {
                 assert(scalar_type->id == ZigTypeIdInt);
-                LLVMValueRef op2_casted = gen_widen_or_shorten(g, false, op2->value.type, scalar_type, op2_value);
+                LLVMValueRef op2_casted = gen_widen_or_shorten(g, false, op2->value.type, operand_type, op2_value);
                 bool is_sloppy = (op_id == IrBinOpBitShiftRightLossy);
                 if (is_sloppy) {
                     if (scalar_type->data.integral.is_signed) {

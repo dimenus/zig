@@ -506,3 +506,52 @@ test "vector | & ^" {
     S.doTheTest();
     comptime S.doTheTest();
 }
+
+test "truncating shift left" {
+    testShlTrunc(@splat(2, u16(std.math.maxInt(u16))));
+    comptime testShlTrunc(@splat(2, u16(std.math.maxInt(u16))));
+}
+fn testShlTrunc(x: @Vector(2, u16)) void {
+    const all = std.vector.all;
+    const shifted = x << @splat(2, u4(1));
+    expect(all(shifted == @splat(2, u16(65534))));
+}
+
+test "truncating shift right" {
+    testShrTrunc(@splat(2, u16(std.math.maxInt(u16))));
+    comptime testShrTrunc(@splat(2, u16(std.math.maxInt(u16))));
+    testShrTrunc2(@splat(2, @bitCast(u64, f64(20.0))));
+    comptime testShrTrunc2(@splat(2, @bitCast(u64, f64(20.0))));
+}
+fn testShrTrunc(x: @Vector(2, u16)) void {
+    const all = std.vector.all;
+    const shifted = x >> @splat(2, u4(1));
+    expect(all(shifted == @splat(2, u16(32767))));
+}
+
+fn testShrTrunc2(x: @Vector(2, u64)) void {
+    const all = std.vector.all;
+    const shifted = x >> @splat(2, u6(52));
+    expect(all(shifted == @splat(2, u64(0x403))));
+}
+
+test "vectors - % and @mod" {
+    const S = struct {
+        fn doTheTest() void {
+            var v: @Vector(4, u32) = [_]u32{5, 6, 7, 8};
+            var w: @Vector(4, u32) = [_]u32{1, 2, 3, 4};
+            var x: @Vector(4, u32) = v % w;
+            expect(x[0] == 0);
+            expect(x[1] == 0);
+            expect(x[2] == 1);
+            expect(x[3] == 0);
+            var y: @Vector(4, u32) = @mod(v, w);
+            expect(y[0] == 0);
+            expect(y[1] == 0);
+            expect(y[2] == 1);
+            expect(y[3] == 0);
+        }
+    };
+    S.doTheTest();
+    comptime S.doTheTest();
+}
