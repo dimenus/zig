@@ -528,7 +528,6 @@ fn testShrTrunc(x: @Vector(2, u16)) void {
     const shifted = x >> @splat(2, u4(1));
     expect(all(shifted == @splat(2, u16(32767))));
 }
-
 fn testShrTrunc2(x: @Vector(2, u64)) void {
     const all = std.vector.all;
     const shifted = x >> @splat(2, u6(52));

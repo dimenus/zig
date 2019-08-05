@@ -2761,23 +2761,37 @@ enum RemKind {
 
 static LLVMValueRef gen_rem(CodeGen *g, bool want_runtime_safety, bool want_fast_math,
         LLVMValueRef val1, LLVMValueRef val2,
-        ZigType *type_entry, RemKind rem_kind)
+        ZigType *type_entry, RemKind rem_kind, uint32_t is_vector)
 {
     ZigLLVMSetFastMath(g->builder, want_fast_math);
 
+    ZigType *scalar_type = type_entry;
+    if (is_vector) {
+        assert(type_entry->id != ZigTypeIdVector);
+        type_entry = get_vector_type(g, is_vector, type_entry);
+    }
     LLVMValueRef zero = LLVMConstNull(get_llvm_type(g, type_entry));
     if (want_runtime_safety) {
-        LLVMValueRef is_zero_bit;
-        if (type_entry->id == ZigTypeIdInt) {
+        LLVMValueRef is_zero_bits;
+        if (scalar_type->id == ZigTypeIdInt) {
             LLVMIntPredicate pred = type_entry->data.integral.is_signed ? LLVMIntSLE : LLVMIntEQ;
-            is_zero_bit = LLVMBuildICmp(g->builder, pred, val2, zero, "");
-        } else if (type_entry->id == ZigTypeIdFloat) {
-            is_zero_bit = LLVMBuildFCmp(g->builder, LLVMRealOEQ, val2, zero, "");
+            is_zero_bits = LLVMBuildICmp(g->builder, pred, val2, zero, "");
+        } else if (scalar_type->id == ZigTypeIdFloat) {
+            is_zero_bits = LLVMBuildFCmp(g->builder, LLVMRealOEQ, val2, zero, "");
         } else {
             zig_unreachable();
         }
         LLVMBasicBlockRef rem_zero_ok_block = LLVMAppendBasicBlock(g->cur_fn_val, "RemZeroOk");
         LLVMBasicBlockRef rem_zero_fail_block = LLVMAppendBasicBlock(g->cur_fn_val, "RemZeroFail");
+        LLVMValueRef is_zero_bit = is_zero_bits;
+        if (is_vector) {
+            is_zero_bit = LLVMConstInt(g->builtin_types.entry_bool->llvm_type, 0, false);
+            for (uint32_t i = 0; i < is_vector; i++) {
+                LLVMValueRef index = LLVMConstInt(g->builtin_types.entry_u32->llvm_type, i, false);
+                is_zero_bit = LLVMBuildOr(g->builder, is_zero_bit,
+                    LLVMBuildExtractElement(g->builder, is_zero_bits, index, ""), "RemZeroReduce");
+            }
+        }
         LLVMBuildCondBr(g->builder, is_zero_bit, rem_zero_fail_block, rem_zero_ok_block);
 
         LLVMPositionBuilderAtEnd(g->builder, rem_zero_fail_block);
@@ -2797,8 +2811,8 @@ static LLVMValueRef gen_rem(CodeGen *g, bool want_runtime_safety, bool want_fast
             return LLVMBuildSelect(g->builder, ltz, c, a, "");
         }
     } else {
-        assert(type_entry->id == ZigTypeIdInt);
-        if (type_entry->data.integral.is_signed) {
+        assert(scalar_type->id == ZigTypeIdInt);
+        if (scalar_type->data.integral.is_signed) {
             if (rem_kind == RemKindRem) {
                 return LLVMBuildSRem(g->builder, val1, val2, "");
             } else {
@@ -2831,7 +2845,11 @@ static LLVMValueRef ir_render_bin_op(CodeGen *g, IrExecutable *executable,
             op1->value.type->data.pointer.ptr_len != PtrLenSingle)
     );
     ZigType *operand_type = op1->value.type;
-    ZigType *scalar_type = (operand_type->id == ZigTypeIdVector) ? operand_type->data.vector.elem_type : operand_type;
+    uint32_t is_vector = 0;
+    if (operand_type->id == ZigTypeIdVector) {
+        is_vector = operand_type->data.vector.len;
+    }
+    ZigType *scalar_type = is_vector ? operand_type->data.vector.elem_type : operand_type;
 
     bool want_runtime_safety = bin_op_instruction->safety_check_on &&
         ir_want_runtime_safety(g, &bin_op_instruction->base);
@@ -2978,10 +2996,10 @@ static LLVMValueRef ir_render_bin_op(CodeGen *g, IrExecutable *executable,
                     op1_value, op2_value, scalar_type, DivKindFloor);
         case IrBinOpRemRem:
             return gen_rem(g, want_runtime_safety, ir_want_fast_math(g, &bin_op_instruction->base),
-                    op1_value, op2_value, scalar_type, RemKindRem);
+                    op1_value, op2_value, scalar_type, RemKindRem, is_vector);
         case IrBinOpRemMod:
             return gen_rem(g, want_runtime_safety, ir_want_fast_math(g, &bin_op_instruction->base),
-                    op1_value, op2_value, scalar_type, RemKindMod);
+                    op1_value, op2_value, scalar_type, RemKindMod, is_vector);
     }
     zig_unreachable();
 }
