@@ -1559,8 +1559,16 @@ bool type_allowed_in_extern(CodeGen *g, ZigType *type_entry) {
                 default:
                     return false;
             }
-        case ZigTypeIdVector:
+        case ZigTypeIdVector: {
+            BigInt do_pop;
+            bigint_init_unsigned(&do_pop, type_entry->data.vector.len);
+            size_t pop = bigint_popcount_unsigned(&do_pop);
+            // GCC cannot handle vector sizes that are not powers of two.
+            if (pop != 1) {
+                return false;
+            }
             return type_allowed_in_extern(g, type_entry->data.vector.elem_type);
+        }
         case ZigTypeIdFloat:
             return true;
         case ZigTypeIdArray:
