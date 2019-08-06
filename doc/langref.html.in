@@ -8255,8 +8255,18 @@ fn foo(comptime T: type, ptr: *T) T {
       and yields {#syntax#}undefined{#endsyntax#}. If both vectors are {#syntax#}undefined{#endsyntax#}, yields an
       {#syntax#}undefined{#endsyntax#} {#syntax#}ElemType{#endsyntax#} vector with length of {#syntax#}mask{#endsyntax#}.</p>
       <p>
-      {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|float|Floats#}, or a
+      {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
       {#link|pointer|Pointers#}. The mask may be any vector length that the target supports, and its' length determines the result length.
+      </p>
+      {#header_close#}
+
+      {#header_open|@splat#}
+      <pre>{#syntax#}@splat(comptime len: u32, scalar: var) @Vector(len, @typeOf(scalar)){#endsyntax#}</pre>
+      <p>
+      Splats a value. {#syntax#}scalar{#endsyntax#} is replicated {#syntax#}len{#endsyntax#} times, into a result vector where all elements are the same.</p>
+      <p>
+      {#syntax#}scalar{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
+      {#link|pointer|Pointers#}.
       </p>
       {#header_close#}
 
