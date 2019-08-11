@@ -554,3 +554,44 @@ test "vectors - % and @mod" {
     S.doTheTest();
     comptime S.doTheTest();
 }
+
+test "vectors - indxed load from vector, SIMD" {
+    const S = struct {
+        fn doTheTest() void {
+            var v: @Vector(4, u32) = [_]u32{5, 6, 7, 8};
+            const w: @Vector(2, i32) = [_]i32{1, 2};
+            var x = v[w];
+            expect(x[0] == 6);
+            expect(x[1] == 7);
+            const w2 = [_]i32{1, 2};
+            var x2 = v[w2];
+            expect(x2[0] == 6);
+            expect(x2[1] == 7);
+        }
+    };
+    S.doTheTest();
+    comptime S.doTheTest();
+}
+
+test "vectors - indexed assign to vector, SIMD" {
+    const S = struct {
+        fn doTheTest() void {
+            var v: @Vector(4, u32) = [_]u32{5, 6, 7, 8};
+            const w: @Vector(2, i32) = [_]i32{1, 2};
+            var a: @Vector(2, u32) = [_]u32{45, 46};
+            v[w] = a;
+            expect(v[0] == 5);
+            expect(v[1] == 45);
+            expect(v[2] == 46);
+            expect(v[3] == 8);
+            const w2 = [_]i32{2, 3};
+            v[w2] = a;
+            expect(v[0] == 5);
+            expect(v[1] == 45);
+            expect(v[2] == 45);
+            expect(v[3] == 46);
+        }
+    };
+    S.doTheTest();
+    comptime S.doTheTest();
+}

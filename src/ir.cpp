@@ -195,6 +195,8 @@ static IrInstruction *ir_analyze_unwrap_err_code(IrAnalyze *ira, IrInstruction *
         IrInstruction *base_ptr, bool initializing);
 static IrInstruction *ir_analyze_store_ptr(IrAnalyze *ira, IrInstruction *source_instr,
         IrInstruction *ptr, IrInstruction *uncasted_value, bool allow_write_through_const);
+static IrInstruction *ir_analyze_shuffle_vector(IrAnalyze *ira, IrInstruction *source_instr,
+    ZigType *scalar_type, IrInstruction *a, IrInstruction *b, IrInstruction *mask);
 static IrInstruction *ir_gen_union_init_expr(IrBuilder *irb, Scope *scope, AstNode *source_node,
     IrInstruction *union_type, IrInstruction *field_name, AstNode *expr_node,
     LVal lval, ResultLoc *parent_result_loc);
@@ -16182,6 +16184,58 @@ static void mark_comptime_value_escape(IrAnalyze *ira, IrInstruction *source_ins
 static IrInstruction *ir_analyze_insert(IrAnalyze *ira, IrInstruction *source_instr,
     IrInstruction *agg, IrInstruction *index_arg, IrInstruction *value_arg) {
     ZigType *vector_type = agg->value.type;
+    assert(vector_type->id == ZigTypeIdVector);
+    uint32_t vector_len = vector_type->data.vector.len;
+    ZigType *elem_type = vector_type->data.vector.elem_type;
+
+    if (index_arg->value.type->id == ZigTypeIdVector || index_arg->value.type->id == ZigTypeIdArray) {
+        uint32_t index_len;
+        if (index_arg->value.type->id == ZigTypeIdVector) {
+            index_len = index_arg->value.type->data.vector.len;
+        } else if (index_arg->value.type->id == ZigTypeIdArray) {
+            index_len = index_arg->value.type->data.array.len;
+        } else {
+            zig_unreachable();
+        }
+        IrInstruction *index = ir_implicit_cast(ira, index_arg,
+            get_vector_type(ira->codegen, index_len, ira->codegen->builtin_types.entry_i32));
+        if (!index || type_is_invalid(index->value.type))
+            return ira->codegen->invalid_instruction;
+        ConstExprValue *idxs = ir_resolve_const(ira, index, UndefBad);
+        if (idxs == nullptr) {
+            ir_add_error(ira, index_arg,
+                buf_sprintf("mask must be comptime"));
+            return ira->codegen->invalid_instruction;
+        }
+        // This type checks values_arg
+        IrInstruction *values = ir_implicit_cast(ira, value_arg,
+            get_vector_type(ira->codegen, index_len, elem_type));
+        if (!values || type_is_invalid(values->value.type))
+            return ira->codegen->invalid_instruction;
+        // Let's do a @shuffle!
+        IrInstruction *mask = ir_const(ira, index_arg,
+            get_vector_type(ira->codegen, vector_len, ira->codegen->builtin_types.entry_i32));
+        mask->value.data.x_array.data.s_none.elements =
+            allocate<ConstExprValue>(vector_len);
+        for (uint32_t i = 0; i < vector_len; i++) {
+            ConstExprValue *out = &mask->value.data.x_array.data.s_none.elements[i];
+            bigint_init_signed(&out->data.x_bigint, ~(int64_t)i);
+        }
+        for (uint32_t i = 0; i < index_len; i++) {
+            uint64_t idx = bigint_as_u64(&idxs->data.x_array.data.s_none.elements[i].data.x_bigint);
+            if (idx >= vector_len) {
+                ErrorMsg *msg = ir_add_error(ira, index_arg,
+                    buf_sprintf("index out of range, maximum %" ZIG_PRI_u64 ", got %" ZIG_PRI_u64,
+                        (uint64_t)vector_len, idx));
+                add_error_note(ira->codegen, msg, index_arg->source_node,
+                    buf_sprintf("when computing vector element at index %" ZIG_PRI_u64, (uint64_t)i));
+                return ira->codegen->invalid_instruction;
+            }
+            bigint_init_unsigned(&mask->value.data.x_array.data.s_none.elements[idx].data.x_bigint, i);
+        }
+        return ir_analyze_shuffle_vector(ira, source_instr, elem_type,
+            values, agg, mask);
+    }
 
     IrInstruction *index = ir_implicit_cast(ira, index_arg, ira->codegen->builtin_types.entry_u32);
     if (type_is_invalid(index->value.type)) {
@@ -18799,6 +18853,24 @@ static IrInstruction *ir_analyze_extract(IrAnalyze *ira, IrInstruction *source_i
     ZigType *vector_type = agg->value.type;
     assert(vector_type->id == ZigTypeIdVector);
     ZigType *return_type = vector_type->data.vector.elem_type;
+
+    if (index_arg->value.type->id == ZigTypeIdVector || index_arg->value.type->id == ZigTypeIdArray) {
+        uint32_t vector_len;
+        if (index_arg->value.type->id == ZigTypeIdVector) {
+            vector_len = index_arg->value.type->data.vector.len;
+        } else if (index_arg->value.type->id == ZigTypeIdArray) {
+            vector_len = index_arg->value.type->data.array.len;
+        } else {
+            zig_unreachable();
+        }
+        IrInstruction *index = ir_implicit_cast(ira, index_arg,
+            get_vector_type(ira->codegen, vector_len, ira->codegen->builtin_types.entry_i32));
+        if (!index || type_is_invalid(index->value.type))
+            return ira->codegen->invalid_instruction;
+        // Let's do a @shuffle!
+        return ir_analyze_shuffle_vector(ira, source_instr, vector_type->data.vector.elem_type,
+            agg, ir_build_const_undefined(&ira->new_irb, source_instr->scope, source_instr->source_node), index);
+    }
 
     IrInstruction *index = ir_implicit_cast(ira, index_arg, ira->codegen->builtin_types.entry_u32);
     if (type_is_invalid(index->value.type)) {
