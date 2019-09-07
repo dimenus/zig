@@ -595,3 +595,40 @@ test "vectors - indexed assign to vector, SIMD" {
     S.doTheTest();
     comptime S.doTheTest();
 }
+
+test "arrays - indexed SIMD load" {
+    const S = struct {
+        fn doTheTest() void {
+            var v = [_]u32{5, 6, 7, 8};
+            const w: @Vector(2, u16) = [_]u16{1, 2};
+            var x = v[w];
+            expect(x[0] == 6);
+            expect(x[1] == 7);
+            const w2: @Vector(2, u16) = [_]u16{1, 2};
+            var x2 = v[w2];
+            expect(x2[0] == 6);
+            expect(x2[1] == 7);
+        }
+    };
+    S.doTheTest();
+    // Requires quite a bit of work
+    //comptime S.doTheTest();
+}
+
+test "arrays - indexed SIMD store" {
+    const S = struct {
+        fn doTheTest() void {
+            var v = [_]u32{5, 6, 7, 8};
+            const w: @Vector(2, u16) = [_]u16{1, 2};
+            var put: @Vector(2, u32) = [_]u32{56, 57};
+            v[w] = put;
+            expect(v[0] == 5);
+            expect(v[1] == 56);
+            expect(v[2] == 57);
+            expect(v[3] == 8);
+        }
+    };
+    S.doTheTest();
+    // Requires quite a bit of work
+    //comptime S.doTheTest();
+}
