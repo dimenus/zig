@@ -1027,8 +1027,10 @@ pub fn concat(allocator: *Allocator, comptime T: type, slices: []const []const T
 test "concat" {
     var buf: [1024]u8 = undefined;
     const a = &std.heap.FixedBufferAllocator.init(&buf).allocator;
+    var buf2: [1024]u8 = undefined;
+    const b = &std.heap.FixedBufferAllocator.init(&buf).allocator;
     testing.expect(eql(u8, try concat(a, u8, [_][]const u8{ "abc", "def", "ghi" }), "abcdefghi"));
-    testing.expect(eql(u32, try concat(a, u32, [_][]const u32{
+    testing.expect(eql(u32, try concat(b, u32, [_][]const u32{
         [_]u32{ 0, 1 },
         [_]u32{ 2, 3, 4 },
         [_]u32{},
