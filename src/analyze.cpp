@@ -1559,8 +1559,16 @@ bool type_allowed_in_extern(CodeGen *g, ZigType *type_entry) {
                 default:
                     return false;
             }
-        case ZigTypeIdVector:
+        case ZigTypeIdVector: {
+            BigInt do_pop;
+            bigint_init_unsigned(&do_pop, type_entry->data.vector.len);
+            size_t pop = bigint_popcount_unsigned(&do_pop);
+            // GCC cannot handle vector sizes that are not powers of two.
+            if (pop != 1) {
+                return false;
+            }
             return type_allowed_in_extern(g, type_entry->data.vector.elem_type);
+        }
         case ZigTypeIdFloat:
             return true;
         case ZigTypeIdArray:
@@ -4711,6 +4719,7 @@ ZigType *get_int_type(CodeGen *g, bool is_signed, uint32_t size_in_bits) {
 bool is_valid_vector_elem_type(ZigType *elem_type) {
     return elem_type->id == ZigTypeIdInt ||
         elem_type->id == ZigTypeIdFloat ||
+        elem_type->id == ZigTypeIdBool ||
         get_codegen_ptr_type(elem_type) != nullptr;
 }
 
@@ -4730,7 +4739,7 @@ ZigType *get_vector_type(CodeGen *g, uint32_t len, ZigType *elem_type) {
 
     ZigType *entry = new_type_table_entry(ZigTypeIdVector);
     if ((len != 0) && type_has_bits(elem_type)) {
-        // Vectors can only be ints, floats, or pointers. ints and floats have trivially resolvable
+        // Vectors can only be ints, floats, bools, or pointers. ints (inc. bools) and floats have trivially resolvable
         // llvm type refs. pointers we will use usize instead.
         LLVMTypeRef example_vector_llvm_type;
         if (elem_type->id == ZigTypeIdPointer) {
@@ -6906,6 +6915,12 @@ uint32_t zig_llvm_fn_key_hash(ZigLLVMFnKey x) {
                 ((uint32_t)(x.data.overflow_arithmetic.add_sub_mul) * 31640542) +
                 ((uint32_t)(x.data.overflow_arithmetic.is_signed) ? 1062315172 : 314955820) +
                 x.data.overflow_arithmetic.vector_len * 1435156945;
+        case ZigLLVMFnIdMaskedVector:
+            return (((uint32_t)(x.data.masked_vector.op) * 2334) +
+                ((((uint32_t)(x.data.masked_vector.bit_count) +
+                   (uint32_t)(x.data.masked_vector.vector_len)) << 16) * 234234) +
+                ((((uint32_t)(x.data.masked_vector.is_float) +
+                   (uint32_t)(x.data.masked_vector.is_pointer)) << 1) * 12315));
     }
     zig_unreachable();
 }
@@ -6936,6 +6951,12 @@ bool zig_llvm_fn_key_eql(ZigLLVMFnKey a, ZigLLVMFnKey b) {
                 (a.data.overflow_arithmetic.add_sub_mul == b.data.overflow_arithmetic.add_sub_mul) &&
                 (a.data.overflow_arithmetic.is_signed == b.data.overflow_arithmetic.is_signed) &&
                 (a.data.overflow_arithmetic.vector_len == b.data.overflow_arithmetic.vector_len);
+        case ZigLLVMFnIdMaskedVector:
+            return (a.data.masked_vector.op == b.data.masked_vector.op) &&
+                (a.data.masked_vector.bit_count == b.data.masked_vector.bit_count) &&
+                (a.data.masked_vector.vector_len == b.data.masked_vector.vector_len) &&
+                (a.data.masked_vector.is_float == b.data.masked_vector.is_float) &&
+                (a.data.masked_vector.is_pointer == b.data.masked_vector.is_pointer);
     }
     zig_unreachable();
 }

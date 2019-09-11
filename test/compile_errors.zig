@@ -6485,13 +6485,46 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
     );
 
     cases.addTest(
+        "using LLVM syntax for @shuffle",
+        \\export fn entry() void {
+        \\    const v: @Vector(4, u32) = [4]u32{0, 1, 2, 3};
+        \\    const x: @Vector(4, u32) = [4]u32{4, 5, 6, 7};
+        \\    var z = @shuffle(u32, v, x, [8]i32{0, 1, 2, 3, 4, 5, 6, 7});
+        \\}
+    ,
+        "tmp.zig:4:39: error: mask index out of bounds",
+        "tmp.zig:4:39: note: when computing vector element at index 4",
+        "tmp.zig:4:39: note: selections from the second vector are specified with negative numbers",
+    );
+
+    cases.addTest(
         "nested vectors",
         \\export fn entry() void {
         \\    const V = @Vector(4, @Vector(4, u8));
         \\    var v: V = undefined;
         \\}
     ,
-        "tmp.zig:2:26: error: vector element type must be integer, float, or pointer; '@Vector(4, u8)' is invalid",
+        "tmp.zig:2:26: error: vector element type must be integer, float, bool, or pointer; '@Vector(4, u8)' is invalid",
+    );
+
+    cases.addTest(
+        "bad @splat type",
+        \\export fn entry() void {
+        \\    const c = 4;
+        \\    var v = @splat(4, c);
+        \\}
+    ,
+        "tmp.zig:3:20: error: vector element type must be integer, float, bool, or pointer; 'comptime_int' is invalid",
+    );
+
+    cases.addTest(
+        "vector out-of bounds index",
+        \\export fn entry() void {
+        \\    var v: @Vector(4, u32) = [4]u32{0, 1, 2, 3};
+        \\    v[5] = 5;
+        \\}
+    ,
+        "tmp.zig:3:7: error: vector index out of range; max is 3, got 5",
     );
 
     cases.add("compileLog of tagged enum doesn't crash the compiler",

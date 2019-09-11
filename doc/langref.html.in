@@ -1247,11 +1247,13 @@ a &= b{#endsyntax#}</pre></td>
           <td>
             <ul>
               <li>{#link|Integers#}</li>
+              <li>{#link|bool|Primitive Types#}</li>
             </ul>
           </td>
           <td>Bitwise AND.
             <ul>
               <li>Invokes {#link|Peer Type Resolution#} for the operands.</li>
+              <li>Both operands (if they are functions) are evaluated.</li>
             </ul>
           </td>
           <td>
@@ -1264,11 +1266,13 @@ a |= b{#endsyntax#}</pre></td>
           <td>
             <ul>
               <li>{#link|Integers#}</li>
+              <li>{#link|bool|Primitive Types#}</li>
             </ul>
           </td>
           <td>Bitwise OR.
             <ul>
               <li>Invokes {#link|Peer Type Resolution#} for the operands.</li>
+              <li>Both operands (if they are functions) are evaluated.</li>
             </ul>
           </td>
           <td>
@@ -1281,6 +1285,7 @@ a ^= b{#endsyntax#}</pre></td>
           <td>
             <ul>
               <li>{#link|Integers#}</li>
+              <li>{#link|bool|Primitive Types#}</li>
             </ul>
           </td>
           <td>Bitwise XOR.
@@ -1297,6 +1302,7 @@ a ^= b{#endsyntax#}</pre></td>
           <td>
             <ul>
               <li>{#link|Integers#}</li>
+              <li>{#link|bool|Primitive Types#}</li>
             </ul>
           </td>
           <td>
@@ -1317,6 +1323,9 @@ a ^= b{#endsyntax#}</pre></td>
                       returns {#syntax#}b{#endsyntax#} ("default value"),
                           otherwise returns the unwrapped value of {#syntax#}a{#endsyntax#}.
                               Note that {#syntax#}b{#endsyntax#} may be a value of type {#link|noreturn#}.
+            <ul>
+              <li>If {#syntax#}a{#endsyntax#} is {#syntax#}false{#endsyntax#}, b is not evaluated.</li>
+            </ul>
           </td>
           <td>
             <pre>{#syntax#}const value: ?u32 = null;
@@ -6477,10 +6486,10 @@ async fn func(y: *i32) void {
       {#header_open|@bitCast#}
       <pre>{#syntax#}@bitCast(comptime DestType: type, value: var) DestType{#endsyntax#}</pre>
       <p>
-      Converts a value of one type to another type.
+      Converts a value of one type to another type. <b>Vectors are numbered right -> left.</b>
       </p>
       <p>
-      Asserts that {#syntax#}@sizeOf(@typeOf(value)) == @sizeOf(DestType){#endsyntax#}.
+      Asserts that {#syntax#}@sizeOf(@typeOf(value)) == @sizeOf(DestType){#endsyntax#}, except Vectors, in which case only the number of bits must match.
       </p>
       <p>
       Asserts that {#syntax#}@typeId(DestType) != @import("builtin").TypeId.Pointer{#endsyntax#}. Use {#syntax#}@ptrCast{#endsyntax#} or {#syntax#}@intToPtr{#endsyntax#} if you need this.
@@ -6491,6 +6500,7 @@ async fn func(y: *i32) void {
       <ul>
           <li>Convert {#syntax#}f32{#endsyntax#} to {#syntax#}u32{#endsyntax#} bits</li>
           <li>Convert {#syntax#}i32{#endsyntax#} to {#syntax#}u32{#endsyntax#} preserving twos complement</li>
+          <li>Convert {#syntax#}@Vector(4, u32){#endsyntax#} to {#syntax#}u128{#endsyntax#}. Note Vectors are numbered right -> left.</li>
       </ul>
       <p>
       Works at compile-time if {#syntax#}value{#endsyntax#} is known at compile time. It's a compile error to bitcast a struct to a scalar type of the same size since structs have undefined layout. However if the struct is packed then it works.
@@ -6512,12 +6522,13 @@ async fn func(y: *i32) void {
 
       {#header_open|@boolToInt#}
       <pre>{#syntax#}@boolToInt(value: bool) u1{#endsyntax#}</pre>
+      <pre>{#syntax#}@boolToInt(value: @Vector(_, bool)) @Vector(_, u1){#endsyntax#}</pre>
       <p>
       Converts {#syntax#}true{#endsyntax#} to {#syntax#}u1(1){#endsyntax#} and {#syntax#}false{#endsyntax#} to
                   {#syntax#}u1(0){#endsyntax#}.
       </p>
       <p>
-      If the value is known at compile-time, the return type is {#syntax#}comptime_int{#endsyntax#}
+      If the value is known at compile-time, and is not a vector, the return type is {#syntax#}comptime_int{#endsyntax#}
           instead of {#syntax#}u1{#endsyntax#}.
       </p>
       {#header_close#}
@@ -7011,7 +7022,7 @@ test "field access by string" {
       {#header_open|@floatCast#}
       <pre>{#syntax#}@floatCast(comptime DestType: type, value: var) DestType{#endsyntax#}</pre>
       <p>
-      Convert from one float type to another. This cast is safe, but may cause the
+      Convert from one float type to another, or from int to float if no precision is lost. This cast is safe, but if down-casting a float may cause the
       numeric value to lose precision.
       </p>
       {#header_close#}
@@ -7229,7 +7240,7 @@ fn add(a: i32, b: i32) i32 { return a + b; }
       {#header_open|@intToFloat#}
       <pre>{#syntax#}@intToFloat(comptime DestType: type, int: var) DestType{#endsyntax#}</pre>
       <p>
-      Converts an integer to the closest floating point representation. To convert the other way, use {#link|@floatToInt#}. This cast is always safe.
+      Converts an integer to the closest floating point representation. To convert the other way, use {#link|@floatToInt#}. This cast is always safe, but may loose precision.
       </p>
       {#header_close#}
 
@@ -7857,7 +7868,7 @@ fn List(comptime T: type) type {
       {#header_open|@truncate#}
       <pre>{#syntax#}@truncate(comptime T: type, integer: var) T{#endsyntax#}</pre>
       <p>
-      This function truncates bits from an integer type, resulting in a smaller
+      This function truncates bits from an integer type (or the integers of a vector), resulting in a smaller
       or same-sized integer type.
       </p>
       <p>
@@ -8223,6 +8234,62 @@ fn foo(comptime T: type, ptr: *T) T {
       </p>
       <p>
       {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|float|Floats#}, or a
+      {#link|pointer|Pointers#}.
+      </p>
+      {#header_close#}
+
+      {#header_open|@shuffle#}
+      <pre>{#syntax#}@shuffle(comptime ElemType: type, a: @Vector(_, ElemType), b: @Vector(_, ElemType), comptime mask: @Vector(_, u32)) @Vector(mask.len, ElemType){#endsyntax#}</pre>
+      <p>
+      Does the {#syntax#}shufflevector{#endsyntax#} instruction. Each element in {#syntax#}comptime{#endsyntax#}
+      (and always {#syntax#}i32{#endsyntax#}) {#syntax#}mask{#endsyntax#} selects a element from either {#syntax#}a{#endsyntax#} or {#syntax#}b{#endsyntax#}.
+      Positive numbers select from {#syntax#}a{#endsyntax#} (starting at 0), while negative values select
+      from {#syntax#}b{#endsyntax#} (starting at -1 and going down). It is recommended to use the {#syntax#}~{#endsyntax#}
+      operator from indexes from b so that both indexes can start from 0 (i.e. ~0 is -1). If either the {#syntax#}mask{#endsyntax#}
+      value or the value from {#syntax#}a{#endsyntax#} or {#syntax#}b{#endsyntax#} that it selects are {#syntax#}undefined{#endsyntax#}
+      then the resulting value is {#syntax#}undefined{#endsyntax#}. Also see {#link|SIMD#} and
+      the relevent <a href="https://llvm.org/docs/LangRef.html#i-shufflevector">LLVM Documentation on
+      {#syntax#}shufflevector{#endsyntax#}</a>, although note that the mask values are interpreted differently than in LLVM-IR.
+      Also, unlike LLVM-IR, the number of elements in {#syntax#}a{#endsyntax#} and {#syntax#}b{#endsyntax#} do not have to match.
+      The {#syntax#}undefined{#endsyntax#} identifier can be selected from up to the length of the other vector,
+      and yields {#syntax#}undefined{#endsyntax#}. If both vectors are {#syntax#}undefined{#endsyntax#}, yields an
+      {#syntax#}undefined{#endsyntax#} {#syntax#}ElemType{#endsyntax#} vector with length of {#syntax#}mask{#endsyntax#}.</p>
+      <p>
+      {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
+      {#link|pointer|Pointers#}. The mask may be any vector length that the target supports, and its' length determines the result length.
+      </p>
+      {#header_close#}
+
+      {#header_open|@splat#}
+      <pre>{#syntax#}@splat(comptime len: u32, scalar: var) @Vector(len, @typeOf(scalar)){#endsyntax#}</pre>
+      <p>
+      Splats a value. {#syntax#}scalar{#endsyntax#} is replicated {#syntax#}len{#endsyntax#} times, into a result vector where all elements are the same.</p>
+      <p>
+      {#syntax#}scalar{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
+      {#link|pointer|Pointers#}.
+      </p>
+      {#header_close#}
+
+      {#header_open|@gather#}
+      <pre>{#syntax#}@gather(comptime ElemType: type, ptrs: @Vector(mask.len, *ElemType), mask: @Vector(mask.len, bool), pass: @Vector(mask.len, ElemType)) @Vector(mask.len, ElemType){#endsyntax#}</pre>
+      <p>
+      Loads the elements pointed to by {#syntax#}ptrs{#endsyntax#}, if the corresponding bit of {#syntax#}mask{#endsyntax#}
+      is {#syntax#}true{#endsyntax#}, otherwise the corresponding element from {#syntax#}pass{#endsyntax#}.
+      </p>
+      <p>
+      {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
+      {#link|pointer|Pointers#}.
+      </p>
+      {#header_close#}
+
+      {#header_open|@scatter#}
+      <pre>{#syntax#}@scatter(comptime ElemType: type, data: @Vector(mask.len, ElemType), ptrs: @Vector(mask.len, *ElemType), mask: @Vector(mask.len, bool)) void{#endsyntax#}</pre>
+      <p>
+      Stores the elements of {#syntax#}data{#endsyntax#} to the locations of {#syntax#}ptrs{#endsyntax#}, if the corresponding bit of {#syntax#}mask{#endsyntax#}
+      is {#syntax#}true{#endsyntax#}.
+      </p>
+      <p>
+      {#syntax#}ElemType{#endsyntax#} must be an {#link|integer|Integers#}, a {#link|bool|Primitive Types#}, a {#link|float|Floats#}, or a
       {#link|pointer|Pointers#}.
       </p>
       {#header_close#}

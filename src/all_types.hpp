@@ -1611,6 +1611,10 @@ enum BuiltinFnId {
     BuiltinFnIdIntToEnum,
     BuiltinFnIdIntType,
     BuiltinFnIdVectorType,
+    BuiltinFnIdShuffle,
+    BuiltinFnIdGather,
+    BuiltinFnIdScatter,
+    BuiltinFnIdSplat,
     BuiltinFnIdSetCold,
     BuiltinFnIdSetRuntimeSafety,
     BuiltinFnIdSetFloatMode,
@@ -1730,6 +1734,7 @@ enum ZigLLVMFnId {
     ZigLLVMFnIdClz,
     ZigLLVMFnIdPopCount,
     ZigLLVMFnIdOverflowArithmetic,
+    ZigLLVMFnIdMaskedVector,
     ZigLLVMFnIdFMA,
     ZigLLVMFnIdFloatOp,
     ZigLLVMFnIdBswap,
@@ -1770,10 +1775,18 @@ struct ZigLLVMFnKey {
         } overflow_arithmetic;
         struct {
             uint32_t bit_count;
+            uint32_t vector_len; // 0 means not a vector
         } bswap;
         struct {
             uint32_t bit_count;
         } bit_reverse;
+        struct {
+            BuiltinFnId op;
+            uint32_t bit_count;
+            bool is_float;
+            bool is_pointer;
+            uint32_t vector_len;
+        } masked_vector;
     } data;
 };
 
@@ -2372,6 +2385,9 @@ enum IrInstructionId {
     IrInstructionIdLoadPtr,
     IrInstructionIdLoadPtrGen,
     IrInstructionIdStorePtr,
+    IrInstructionIdVectorElem,
+    IrInstructionIdExtract,
+    IrInstructionIdInsert,
     IrInstructionIdFieldPtr,
     IrInstructionIdStructFieldPtr,
     IrInstructionIdUnionFieldPtr,
@@ -2428,6 +2444,10 @@ enum IrInstructionId {
     IrInstructionIdBoolToInt,
     IrInstructionIdIntType,
     IrInstructionIdVectorType,
+    IrInstructionIdShuffleVector,
+    IrInstructionIdGather,
+    IrInstructionIdScatter,
+    IrInstructionIdSplat,
     IrInstructionIdBoolNot,
     IrInstructionIdMemset,
     IrInstructionIdMemcpy,
@@ -2688,6 +2708,29 @@ struct IrInstructionLoadPtr {
     IrInstruction base;
 
     IrInstruction *ptr;
+};
+
+struct IrInstructionVectorElem {
+    IrInstruction base;
+
+    IrInstruction *agg;
+    IrInstruction *index;
+    IrInstruction *result_loc;
+};
+
+struct IrInstructionExtract {
+    IrInstruction base;
+
+    IrInstruction *agg;
+    IrInstruction *index;
+};
+
+struct IrInstructionInsert {
+    IrInstruction base;
+
+    IrInstruction *agg;
+    IrInstruction *index;
+    IrInstruction *value;
 };
 
 struct IrInstructionLoadPtrGen {
@@ -3667,6 +3710,51 @@ struct IrInstructionVectorToArray {
 
     IrInstruction *vector;
     IrInstruction *result_loc;
+};
+
+struct IrInstructionShuffleVector {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *a;
+    IrInstruction *b;
+    IrInstruction *mask; // This is in zig-format, not llvm format
+};
+
+// scatter and gather had to be split because scatter
+// has side effects and gather does not
+struct IrInstructionMaskedVector {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
+};
+
+struct IrInstructionGather {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
+};
+
+struct IrInstructionScatter {
+    IrInstruction base;
+
+    IrInstruction *scalar_type;
+    IrInstruction *ptr; // pointer or vector of pointers
+    IrInstruction *vector;
+    IrInstruction *mask;
+};
+
+struct IrInstructionSplat {
+    IrInstruction base;
+
+    IrInstruction *len;
+    IrInstruction *scalar;
 };
 
 struct IrInstructionAssertZero {

@@ -108,19 +108,11 @@ pub fn hash(hasher: var, key: var, comptime strat: HashStrategy) void {
         .Array => hashArray(hasher, key, strat),
 
         .Vector => |info| {
-            if (info.child.bit_count % 8 == 0) {
-                // If there's no unused bits in the child type, we can just hash
-                // this as an array of bytes.
-                hasher.update(mem.asBytes(&key));
-            } else {
-                // Otherwise, hash every element.
-                // TODO remove the copy to an array once field access is done.
-                const array: [info.len]info.child = key;
-                comptime var i: u32 = 0;
-                inline while (i < info.len) : (i += 1) {
-                    hash(hasher, array[i], strat);
-                }
-            }
+            // LLVM is suppose to pack bits if the child size is not a multiple of 8 bits,
+            // however this has had bugs. https://bugs.llvm.org/show_bug.cgi?id=42803
+            // As Vectors are not stored in memory, we do not have to worry about the trailing bits
+            // (they are always zero).
+            hasher.update(mem.asBytes(&key));
         },
 
         .Struct => |info| {
@@ -355,9 +347,9 @@ test "testHash union" {
 }
 
 test "testHash vector" {
-    const a: @Vector(4, u32) = [_]u32{ 1, 2, 3, 4 };
-    const b: @Vector(4, u32) = [_]u32{ 1, 2, 3, 5 };
-    const c: @Vector(4, u31) = [_]u31{ 1, 2, 3, 4 };
+    var a: @Vector(4, u32) = [_]u32{ 1, 2, 3, 4 };
+    var b: @Vector(4, u32) = [_]u32{ 1, 2, 3, 5 };
+    var c: @Vector(4, u31) = [_]u31{ 1, 2, 3, 4 };
     testing.expect(testHash(a) == testHash(a));
     testing.expect(testHash(a) != testHash(b));
     testing.expect(testHash(a) != testHash(c));
