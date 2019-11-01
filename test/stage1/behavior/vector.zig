@@ -3,6 +3,25 @@ const mem = std.mem;
 const expect = std.testing.expect;
 const builtin = @import("builtin");
 
+const Vec4 = extern union {
+    vecs: @Vector(4, f32),
+    flts: [4]f32,
+};
+
+test "vector extern union" {
+    const S = struct {
+        fn doTheTest() void {
+            var foo = Vec4{ .vecs = [_]f32{ 1.1, 2.4, 3.7, 4.8 } };
+            //var foo = Vec4{ .flts = [_]f32{ 1.1, 2.4, 3.7, 4.8 } };
+            const bar = foo.vecs[2];
+            expect(foo.flts[2] == 3.7);
+            expect(mem.eql(f32, ([4]f32)(foo.vecs), [_]f32{ 1.1, 2.4, 3.7, 4.8 }));
+        }
+    };
+    S.doTheTest();
+    comptime S.doTheTest();
+}
+
 test "implicit cast vector to array - bool" {
     const S = struct {
         fn doTheTest() void {
@@ -177,12 +196,12 @@ test "vector bin compares with mem.eql" {
         fn doTheTest() void {
             var v: @Vector(4, i32) = [4]i32{ 2147483647, -2, 30, 40 };
             var x: @Vector(4, i32) = [4]i32{ 1, 2147483647, 30, 4 };
-            expect(mem.eql(bool, ([4]bool)(v == x), [4]bool{ false, false,  true, false}));
-            expect(mem.eql(bool, ([4]bool)(v != x), [4]bool{  true,  true, false,  true}));
-            expect(mem.eql(bool, ([4]bool)(v  < x), [4]bool{ false,  true, false, false}));
-            expect(mem.eql(bool, ([4]bool)(v  > x), [4]bool{  true, false, false,  true}));
-            expect(mem.eql(bool, ([4]bool)(v <= x), [4]bool{ false,  true,  true, false}));
-            expect(mem.eql(bool, ([4]bool)(v >= x), [4]bool{  true, false,  true,  true}));
+            expect(mem.eql(bool, ([4]bool)(v == x), [4]bool{ false, false, true, false }));
+            expect(mem.eql(bool, ([4]bool)(v != x), [4]bool{ true, true, false, true }));
+            expect(mem.eql(bool, ([4]bool)(v < x), [4]bool{ false, true, false, false }));
+            expect(mem.eql(bool, ([4]bool)(v > x), [4]bool{ true, false, false, true }));
+            expect(mem.eql(bool, ([4]bool)(v <= x), [4]bool{ false, true, true, false }));
+            expect(mem.eql(bool, ([4]bool)(v >= x), [4]bool{ true, false, true, true }));
         }
     };
     S.doTheTest();
@@ -232,4 +251,3 @@ test "vector access elements - store" {
         expect(-364 == a[3]);
     }
 }
-
