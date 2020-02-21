@@ -521,6 +521,7 @@ void get_native_target(ZigTarget *target) {
     }
     if (target_is_glibc(target)) {
         target->glibc_version = heap::c_allocator.create<ZigGLibCVersion>();
+        target->glibc_abi = heap::c_allocator.create<ZigGLibCAbi>();
         target_init_default_glibc_version(target);
 #ifdef ZIG_OS_LINUX
         Error err;
@@ -1560,16 +1561,43 @@ static const AvailableLibC libcs_available[] = {
     {ZigLLVM_x86_64, OsWindows, ZigLLVM_GNU},
 };
 
-bool target_can_build_libc(const ZigTarget *target) {
+bool target_can_build_libc_abi(ZigTarget *target, Buf *zig_lib_dir) {
+    Error err;
+    if ((err = glibc_load_metadata(target->glibc_abi, zig_lib_dir, true))) {
+        fprintf(stderr, "%s\n", err_str(err));
+        return false;
+    }
+
+    bool triple_found = false;
     for (size_t i = 0; i < array_length(libcs_available); i += 1) {
         if (target->arch == libcs_available[i].arch &&
             target->os == libcs_available[i].os &&
             target->abi == libcs_available[i].abi)
         {
-            return true;
+            triple_found = true;
         }
     }
-    return false;
+    return triple_found;
+}
+
+bool target_can_build_libc_version(const ZigTarget *target, Buf *zig_lib_dir) {
+        target->glibc_version = heap::c_allocator.create<ZigGLibCVersion>();
+    uint8_t target_ver_index = 0;
+    for (;target_ver_index < target->glibc_abi->all_versions.length; target_ver_index += 1) {
+        const ZigGLibCVersion *this_ver = &target->glibc_abi->all_versions.at(target_ver_index);
+        if (this_ver->major == target->glibc_version->major &&
+            this_ver->minor == target->glibc_version->minor &&
+            this_ver->patch == target->glibc_version->patch)
+        {
+            break;
+        }
+    }
+    if (target_ver_index < target->glibc_abi->all_versions.length) {
+        return true;
+    } else {
+        return false;
+    }
+
 }
 
 const char *target_libc_generic_name(const ZigTarget *target) {

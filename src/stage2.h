@@ -304,6 +304,7 @@ struct ZigTarget {
     Os os;
     enum ZigLLVM_EnvironmentType abi;
     struct ZigGLibCVersion *glibc_version; // null means default
+    struct ZigGLibCAbi *glibc_abi;
     struct Stage2CpuFeatures *cpu_features;
     bool is_native;
 };

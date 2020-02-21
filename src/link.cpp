@@ -1619,14 +1619,8 @@ static void add_rpath(LinkJob *lj, Buf *rpath) {
 
 static void add_glibc_libs(LinkJob *lj) {
     Error err;
-    ZigGLibCAbi *glibc_abi;
-    if ((err = glibc_load_metadata(&glibc_abi, lj->codegen->zig_lib_dir, true))) {
-        fprintf(stderr, "%s\n", err_str(err));
-        exit(1);
-    }
-
     Buf *artifact_dir;
-    if ((err = glibc_build_dummies_and_maps(lj->codegen, glibc_abi, lj->codegen->zig_target,
+    if ((err = glibc_build_dummies_and_maps(lj->codegen, lj->codegen->zig_target,
                     &artifact_dir, true, lj->build_dep_prog_node)))
     {
         fprintf(stderr, "%s\n", err_str(err));

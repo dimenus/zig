@@ -455,6 +455,8 @@ static int main0(int argc, char **argv) {
     ZigList<const char *> llvm_argv = {0};
     llvm_argv.append("zig (LLVM option parsing)");
 
+        Buf *zig_lib_dir = (override_lib_dir == nullptr) ? get_zig_lib_dir() : override_lib_dir;
+
     if (argc >= 2 && strcmp(argv[1], "build") == 0) {
         Buf zig_exe_path_buf = BUF_INIT;
         if ((err = os_self_exe_path(&zig_exe_path_buf))) {
@@ -490,8 +492,6 @@ static int main0(int argc, char **argv) {
                 args.append(argv[i]);
             }
         }
-
-        Buf *zig_lib_dir = (override_lib_dir == nullptr) ? get_zig_lib_dir() : override_lib_dir;
 
         Buf *build_runner_path = buf_alloc();
         os_path_join(get_zig_special_dir(zig_lib_dir), buf_create_from_str("build_runner.zig"), build_runner_path);
@@ -1001,12 +1001,14 @@ static int main0(int argc, char **argv) {
             }
         }
         if (target_is_glibc(&target)) {
-            target.glibc_version = heap::c_allocator.create<ZigGLibCVersion>();
-
+            target.glibc_abi = heap::c_allocator.create<ZigGLibCAbi>();
+            if (!target_can_build_libc_abi(&target, zig_lib_dir)) {
+                return print_error_usage(arg0);
+            }
             if (target_glibc != nullptr) {
                 if ((err = target_parse_glibc_version(target.glibc_version, target_glibc))) {
                     fprintf(stderr, "invalid glibc version '%s': %s\n", target_glibc, err_str(err));
-                    return print_error_usage(arg0);
+                    return false;
                 }
             } else {
                 target_init_default_glibc_version(&target);

@@ -18,10 +18,9 @@ static const ZigGLibCLib glibc_libs[] = {
     {"rt", 1},
 };
 
-Error glibc_load_metadata(ZigGLibCAbi **out_result, Buf *zig_lib_dir, bool verbose) {
+Error glibc_load_metadata(ZigGLibCAbi *glibc_abi, Buf *zig_lib_dir, bool verbose) {
     Error err;
 
-    ZigGLibCAbi *glibc_abi = heap::c_allocator.create<ZigGLibCAbi>();
     glibc_abi->vers_txt_path = buf_sprintf("%s" OS_SEP "libc" OS_SEP "glibc" OS_SEP "vers.txt", buf_ptr(zig_lib_dir));
     glibc_abi->fns_txt_path = buf_sprintf("%s" OS_SEP "libc" OS_SEP "glibc" OS_SEP "fns.txt", buf_ptr(zig_lib_dir));
     glibc_abi->abi_txt_path = buf_sprintf("%s" OS_SEP "libc" OS_SEP "glibc" OS_SEP "abi.txt", buf_ptr(zig_lib_dir));
@@ -164,11 +163,10 @@ Error glibc_load_metadata(ZigGLibCAbi **out_result, Buf *zig_lib_dir, bool verbo
         }
     }
 
-    *out_result = glibc_abi;
     return ErrorNone;
 }
 
-Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, const ZigTarget *target,
+Error glibc_build_dummies_and_maps(CodeGen *g, const ZigTarget *target,
         Buf **out_dir, bool verbose, Stage2ProgressNode *progress_node)
 {
     Error err;
@@ -222,11 +220,11 @@ Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, con
     }
 
 
-    ZigGLibCVerList *ver_list_base = glibc_abi->version_table.get(target);
+    ZigGLibCVerList *ver_list_base = target->glibc_abi->version_table.get(target);
 
     uint8_t target_ver_index = 0;
-    for (;target_ver_index < glibc_abi->all_versions.length; target_ver_index += 1) {
-        const ZigGLibCVersion *this_ver = &glibc_abi->all_versions.at(target_ver_index);
+    for (;target_ver_index < target->glibc_abi->all_versions.length; target_ver_index += 1) {
+        const ZigGLibCVersion *this_ver = &target->glibc_abi->all_versions.at(target_ver_index);
         if (this_ver->major == target->glibc_version->major &&
             this_ver->minor == target->glibc_version->minor &&
             this_ver->patch == target->glibc_version->patch)
@@ -234,7 +232,7 @@ Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, con
             break;
         }
     }
-    if (target_ver_index == glibc_abi->all_versions.length) {
+    if (target_ver_index == target->glibc_abi->all_versions.length) {
         if (verbose) {
             fprintf(stderr, "Unrecognized glibc version: %d.%d.%d\n",
                    target->glibc_version->major,
@@ -247,8 +245,8 @@ Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, con
     Buf *map_file_path = buf_sprintf("%s" OS_SEP "all.map", buf_ptr(dummy_dir));
     Buf *map_contents = buf_alloc();
 
-    for (uint8_t ver_i = 0; ver_i < glibc_abi->all_versions.length; ver_i += 1) {
-        const ZigGLibCVersion *ver = &glibc_abi->all_versions.at(ver_i);
+    for (uint8_t ver_i = 0; ver_i < target->glibc_abi->all_versions.length; ver_i += 1) {
+        const ZigGLibCVersion *ver = &target->glibc_abi->all_versions.at(ver_i);
         if (ver->patch == 0) {
             buf_appendf(map_contents, "GLIBC_%d.%d { };\n", ver->major, ver->minor);
         } else {
@@ -273,8 +271,8 @@ Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, con
         buf_appendf(zig_body, "comptime {\n");
         buf_appendf(zig_body, "    asm (\n");
 
-        for (size_t fn_i = 0; fn_i < glibc_abi->all_functions.length; fn_i += 1) {
-            const ZigGLibCFn *libc_fn = &glibc_abi->all_functions.at(fn_i);
+        for (size_t fn_i = 0; fn_i < target->glibc_abi->all_functions.length; fn_i += 1) {
+            const ZigGLibCFn *libc_fn = &target->glibc_abi->all_functions.at(fn_i);
             if (libc_fn->lib != lib) continue;
             ZigGLibCVerList *ver_list = &ver_list_base[fn_i];
             // Pick the default symbol version:
@@ -296,7 +294,7 @@ Error glibc_build_dummies_and_maps(CodeGen *g, const ZigGLibCAbi *glibc_abi, con
                 uint8_t ver_index = ver_list->versions[ver_i];
 
                 Buf *stub_name;
-                const ZigGLibCVersion *ver = &glibc_abi->all_versions.at(ver_index);
+                const ZigGLibCVersion *ver = &target->glibc_abi->all_versions.at(ver_index);
                 const char *sym_name = buf_ptr(libc_fn->name);
                 if (ver->patch == 0) {
                     stub_name = buf_sprintf("%s_%d_%d", sym_name, ver->major, ver->minor);

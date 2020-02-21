@@ -39,8 +39,8 @@ struct ZigGLibCAbi {
     HashMap<const ZigTarget *, ZigGLibCVerList *, hash_glibc_target, eql_glibc_target> version_table;
 };
 
-Error glibc_load_metadata(ZigGLibCAbi **out_result, Buf *zig_lib_dir, bool verbose);
-Error glibc_build_dummies_and_maps(CodeGen *codegen, const ZigGLibCAbi *glibc_abi, const ZigTarget *target,
+Error glibc_load_metadata(ZigGLibCAbi *glibc_abi, Buf *zig_lib_dir, bool verbose);
+Error glibc_build_dummies_and_maps(CodeGen *codegen, const ZigTarget *target,
         Buf **out_dir, bool verbose, Stage2ProgressNode *progress_node);
 
 // returns ErrorUnknownABI when glibc is not the native libc
