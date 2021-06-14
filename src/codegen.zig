@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
-const ir = @import("air.zig");
+const air = @import("air.zig");
 const Type = @import("type.zig").Type;
 const Value = @import("value.zig").Value;
 const TypedValue = @import("TypedValue.zig");
@@ -286,7 +286,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         /// across each runtime branch upon joining.
         branch_stack: *std.ArrayList(Branch),
 
-        blocks: std.AutoHashMapUnmanaged(*ir.Inst.Block, BlockData) = .{},
+        blocks: std.AutoHashMapUnmanaged(*air.Inst.Block, BlockData) = .{},
 
         register_manager: RegisterManager(Self, Register, &callee_preserved_regs) = .{},
         /// Maps offset to what is stored there.
@@ -372,7 +372,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         };
 
         const Branch = struct {
-            inst_table: std.AutoArrayHashMapUnmanaged(*ir.Inst, MCValue) = .{},
+            inst_table: std.AutoArrayHashMapUnmanaged(*air.Inst, MCValue) = .{},
 
             fn deinit(self: *Branch, gpa: *Allocator) void {
                 self.inst_table.deinit(gpa);
@@ -381,7 +381,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         };
 
         const StackAllocation = struct {
-            inst: *ir.Inst,
+            inst: *air.Inst,
             /// TODO do we need size? should be determined by inst.ty.abiSize()
             size: u32,
         };
@@ -709,7 +709,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             try self.dbgAdvancePCAndLine(self.end_di_line, self.end_di_column);
         }
 
-        fn genBody(self: *Self, body: ir.Body) InnerError!void {
+        fn genBody(self: *Self, body: air.Body) InnerError!void {
             for (body.instructions) |inst| {
                 try self.ensureProcessDeathCapacity(@popCount(@TypeOf(inst.deaths), inst.deaths));
 
@@ -720,7 +720,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
                     try branch.inst_table.putNoClobber(self.gpa, inst, mcv);
                 }
 
-                var i: ir.Inst.DeathsBitIndex = 0;
+                var i: air.Inst.DeathsBitIndex = 0;
                 while (inst.getOperand(i)) |operand| : (i += 1) {
                     if (inst.operandDies(i))
                         self.processDeath(operand);
@@ -773,7 +773,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         }
 
         /// Asserts there is already capacity to insert into top branch inst_table.
-        fn processDeath(self: *Self, inst: *ir.Inst) void {
+        fn processDeath(self: *Self, inst: *air.Inst) void {
             if (inst.tag == .constant) return; // Constants are immortal.
             // When editing this function, note that the logic must synchronize with `reuseOperand`.
             const prev_value = self.getResolvedInstValue(inst);
@@ -815,7 +815,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genFuncInst(self: *Self, inst: *ir.Inst) !MCValue {
+        fn genFuncInst(self: *Self, inst: *air.Inst) !MCValue {
             switch (inst.tag) {
                 .add => return self.genAdd(inst.castTag(.add).?),
                 .addwrap => return self.genAddWrap(inst.castTag(.addwrap).?),
@@ -882,7 +882,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn allocMem(self: *Self, inst: *ir.Inst, abi_size: u32, abi_align: u32) !u32 {
+        fn allocMem(self: *Self, inst: *air.Inst, abi_size: u32, abi_align: u32) !u32 {
             if (abi_align > self.stack_align)
                 self.stack_align = abi_align;
             // TODO find a free slot instead of always appending
@@ -898,7 +898,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         }
 
         /// Use a pointer instruction as the basis for allocating stack memory.
-        fn allocMemPtr(self: *Self, inst: *ir.Inst) !u32 {
+        fn allocMemPtr(self: *Self, inst: *air.Inst) !u32 {
             const elem_ty = inst.ty.elemType();
             const abi_size = math.cast(u32, elem_ty.abiSize(self.target.*)) catch {
                 return self.fail(inst.src, "type '{}' too big to fit into stack frame", .{elem_ty});
@@ -908,7 +908,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return self.allocMem(inst, abi_size, abi_align);
         }
 
-        fn allocRegOrMem(self: *Self, inst: *ir.Inst, reg_ok: bool) !MCValue {
+        fn allocRegOrMem(self: *Self, inst: *air.Inst, reg_ok: bool) !MCValue {
             const elem_ty = inst.ty;
             const abi_size = math.cast(u32, elem_ty.abiSize(self.target.*)) catch {
                 return self.fail(inst.src, "type '{}' too big to fit into stack frame", .{elem_ty});
@@ -931,7 +931,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return MCValue{ .stack_offset = stack_offset };
         }
 
-        pub fn spillInstruction(self: *Self, src: LazySrcLoc, reg: Register, inst: *ir.Inst) !void {
+        pub fn spillInstruction(self: *Self, src: LazySrcLoc, reg: Register, inst: *air.Inst) !void {
             const stack_mcv = try self.allocRegOrMem(inst, false);
             log.debug("spilling {*} to stack mcv {any}", .{ inst, stack_mcv });
             const reg_mcv = self.getResolvedInstValue(inst);
@@ -953,18 +953,18 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         /// Allocates a new register and copies `mcv` into it.
         /// `reg_owner` is the instruction that gets associated with the register in the register table.
         /// This can have a side effect of spilling instructions to the stack to free up a register.
-        fn copyToNewRegister(self: *Self, reg_owner: *ir.Inst, mcv: MCValue) !MCValue {
+        fn copyToNewRegister(self: *Self, reg_owner: *air.Inst, mcv: MCValue) !MCValue {
             const reg = try self.register_manager.allocReg(reg_owner, &.{});
             try self.genSetReg(reg_owner.src, reg_owner.ty, reg, mcv);
             return MCValue{ .register = reg };
         }
 
-        fn genAlloc(self: *Self, inst: *ir.Inst.NoOp) !MCValue {
+        fn genAlloc(self: *Self, inst: *air.Inst.NoOp) !MCValue {
             const stack_offset = try self.allocMemPtr(&inst.base);
             return MCValue{ .ptr_stack_offset = stack_offset };
         }
 
-        fn genFloatCast(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genFloatCast(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -973,7 +973,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genIntCast(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIntCast(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -992,7 +992,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genNot(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genNot(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1025,7 +1025,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
 
             switch (arch) {
                 .x86_64 => {
-                    var imm = ir.Inst.Constant{
+                    var imm = air.Inst.Constant{
                         .base = .{
                             .tag = .constant,
                             .deaths = 0,
@@ -1037,7 +1037,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
                     return try self.genX8664BinMath(&inst.base, inst.operand, &imm.base);
                 },
                 .arm, .armeb => {
-                    var imm = ir.Inst.Constant{
+                    var imm = air.Inst.Constant{
                         .base = .{
                             .tag = .constant,
                             .deaths = 0,
@@ -1052,7 +1052,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genAdd(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genAdd(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1065,7 +1065,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genAddWrap(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genAddWrap(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1074,7 +1074,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genMul(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genMul(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1085,7 +1085,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genMulWrap(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genMulWrap(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1094,7 +1094,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genDiv(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genDiv(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1103,7 +1103,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genBitAnd(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genBitAnd(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1113,7 +1113,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genBitOr(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genBitOr(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1123,7 +1123,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genXor(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genXor(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1133,7 +1133,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genOptionalPayload(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genOptionalPayload(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1142,7 +1142,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genOptionalPayloadPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genOptionalPayloadPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1151,7 +1151,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genUnwrapErrErr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genUnwrapErrErr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1160,7 +1160,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genUnwrapErrPayload(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genUnwrapErrPayload(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1169,7 +1169,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
         // *(E!T) -> E
-        fn genUnwrapErrErrPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genUnwrapErrErrPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1178,7 +1178,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
         // *(E!T) -> *T
-        fn genUnwrapErrPayloadPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genUnwrapErrPayloadPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1186,7 +1186,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
                 else => return self.fail(inst.base.src, "TODO implement unwrap error union payload ptr for {}", .{self.target.cpu.arch}),
             }
         }
-        fn genWrapOptional(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genWrapOptional(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             const optional_ty = inst.base.ty;
 
             // No side effects, so if it's unreferenced, do nothing.
@@ -1203,7 +1203,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         }
 
         /// T to E!T
-        fn genWrapErrUnionPayload(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genWrapErrUnionPayload(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1214,7 +1214,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         }
 
         /// E to E!T
-        fn genWrapErrUnionErr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genWrapErrUnionErr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1223,7 +1223,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
                 else => return self.fail(inst.base.src, "TODO implement wrap errunion error for {}", .{self.target.cpu.arch}),
             }
         }
-        fn genVarPtr(self: *Self, inst: *ir.Inst.VarPtr) !MCValue {
+        fn genVarPtr(self: *Self, inst: *air.Inst.VarPtr) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1233,7 +1233,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn reuseOperand(self: *Self, inst: *ir.Inst, op_index: ir.Inst.DeathsBitIndex, mcv: MCValue) bool {
+        fn reuseOperand(self: *Self, inst: *air.Inst, op_index: air.Inst.DeathsBitIndex, mcv: MCValue) bool {
             if (!inst.operandDies(op_index))
                 return false;
 
@@ -1264,7 +1264,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return true;
         }
 
-        fn genLoad(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genLoad(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             const elem_ty = inst.base.ty;
             if (!elem_ty.hasCodeGenBits())
                 return MCValue.none;
@@ -1308,7 +1308,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return dst_mcv;
         }
 
-        fn genStore(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genStore(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             const ptr = try self.resolveInst(inst.lhs);
             const value = try self.resolveInst(inst.rhs);
             const elem_ty = inst.rhs.ty;
@@ -1344,11 +1344,11 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return .none;
         }
 
-        fn genStructFieldPtr(self: *Self, inst: *ir.Inst.StructFieldPtr) !MCValue {
+        fn genStructFieldPtr(self: *Self, inst: *air.Inst.StructFieldPtr) !MCValue {
             return self.fail(inst.base.src, "TODO implement codegen struct_field_ptr", .{});
         }
 
-        fn genSub(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genSub(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1361,7 +1361,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genSubWrap(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genSubWrap(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue.dead;
@@ -1394,7 +1394,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             };
         }
 
-        fn genArmBinOp(self: *Self, inst: *ir.Inst, op_lhs: *ir.Inst, op_rhs: *ir.Inst, op: ir.Inst.Tag) !MCValue {
+        fn genArmBinOp(self: *Self, inst: *air.Inst, op_lhs: *air.Inst, op_rhs: *air.Inst, op: air.Inst.Tag) !MCValue {
             const lhs = try self.resolveInst(op_lhs);
             const rhs = try self.resolveInst(op_rhs);
 
@@ -1498,7 +1498,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             lhs_mcv: MCValue,
             rhs_mcv: MCValue,
             swap_lhs_and_rhs: bool,
-            op: ir.Inst.Tag,
+            op: air.Inst.Tag,
         ) !void {
             assert(lhs_mcv == .register or rhs_mcv == .register);
 
@@ -1548,7 +1548,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genArmMul(self: *Self, inst: *ir.Inst, op_lhs: *ir.Inst, op_rhs: *ir.Inst) !MCValue {
+        fn genArmMul(self: *Self, inst: *air.Inst, op_lhs: *air.Inst, op_rhs: *air.Inst) !MCValue {
             const lhs = try self.resolveInst(op_lhs);
             const rhs = try self.resolveInst(op_rhs);
 
@@ -1618,7 +1618,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         /// Perform "binary" operators, excluding comparisons.
         /// Currently, the following ops are supported:
         /// ADD, SUB, XOR, OR, AND
-        fn genX8664BinMath(self: *Self, inst: *ir.Inst, op_lhs: *ir.Inst, op_rhs: *ir.Inst) !MCValue {
+        fn genX8664BinMath(self: *Self, inst: *air.Inst, op_lhs: *air.Inst, op_rhs: *air.Inst) !MCValue {
             // We'll handle these ops in two steps.
             // 1) Prepare an output location (register or memory)
             //    This location will be the location of the operand that dies (if one exists)
@@ -1641,7 +1641,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             // as the result MCValue.
             var dst_mcv: MCValue = undefined;
             var src_mcv: MCValue = undefined;
-            var src_inst: *ir.Inst = undefined;
+            var src_inst: *air.Inst = undefined;
             if (self.reuseOperand(inst, 0, lhs)) {
                 // LHS dies; use it as the destination.
                 // Both operands cannot be memory.
@@ -2107,7 +2107,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genArgDbgInfo(self: *Self, inst: *ir.Inst.Arg, mcv: MCValue) !void {
+        fn genArgDbgInfo(self: *Self, inst: *air.Inst.Arg, mcv: MCValue) !void {
             const name_with_null = inst.name[0 .. mem.lenZ(inst.name) + 1];
 
             switch (mcv) {
@@ -2166,7 +2166,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genArg(self: *Self, inst: *ir.Inst.Arg) !MCValue {
+        fn genArg(self: *Self, inst: *air.Inst.Arg) !MCValue {
             const arg_index = self.arg_index;
             self.arg_index += 1;
 
@@ -2224,7 +2224,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return .none;
         }
 
-        fn genCall(self: *Self, inst: *ir.Inst.Call) !MCValue {
+        fn genCall(self: *Self, inst: *air.Inst.Call) !MCValue {
             var info = try self.resolveCallingConventionValues(inst.base.src, inst.func.ty);
             defer info.deinit(self);
 
@@ -2559,7 +2559,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return info.return_value;
         }
 
-        fn genRef(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genRef(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             const operand = try self.resolveInst(inst.operand);
             switch (operand) {
                 .unreach => unreachable,
@@ -2619,16 +2619,16 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return .unreach;
         }
 
-        fn genRet(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genRet(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             const operand = try self.resolveInst(inst.operand);
             return self.ret(inst.base.src, operand);
         }
 
-        fn genRetVoid(self: *Self, inst: *ir.Inst.NoOp) !MCValue {
+        fn genRetVoid(self: *Self, inst: *air.Inst.NoOp) !MCValue {
             return self.ret(inst.base.src, .none);
         }
 
-        fn genCmp(self: *Self, inst: *ir.Inst.BinOp, op: math.CompareOperator) !MCValue {
+        fn genCmp(self: *Self, inst: *air.Inst.BinOp, op: math.CompareOperator) !MCValue {
             // No side effects, so if it's unreferenced, do nothing.
             if (inst.base.isUnused())
                 return MCValue{ .dead = {} };
@@ -2708,7 +2708,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genDbgStmt(self: *Self, inst: *ir.Inst.DbgStmt) !MCValue {
+        fn genDbgStmt(self: *Self, inst: *air.Inst.DbgStmt) !MCValue {
             // TODO when reworking AIR memory layout, rework source locations here as
             // well to be more efficient, as well as support inlined function calls correctly.
             // For now we convert LazySrcLoc to absolute byte offset, to match what the
@@ -2718,7 +2718,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return MCValue.dead;
         }
 
-        fn genCondBr(self: *Self, inst: *ir.Inst.CondBr) !MCValue {
+        fn genCondBr(self: *Self, inst: *air.Inst.CondBr) !MCValue {
             const cond = try self.resolveInst(inst.condition);
 
             const reloc: Reloc = switch (arch) {
@@ -2928,17 +2928,17 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return MCValue.unreach;
         }
 
-        fn genIsNull(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsNull(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             switch (arch) {
                 else => return self.fail(inst.base.src, "TODO implement isnull for {}", .{self.target.cpu.arch}),
             }
         }
 
-        fn genIsNullPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsNullPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             return self.fail(inst.base.src, "TODO load the operand and call genIsNull", .{});
         }
 
-        fn genIsNonNull(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsNonNull(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // Here you can specialize this instruction if it makes sense to, otherwise the default
             // will call genIsNull and invert the result.
             switch (arch) {
@@ -2946,29 +2946,29 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genIsNonNullPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsNonNullPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             return self.fail(inst.base.src, "TODO load the operand and call genIsNonNull", .{});
         }
 
-        fn genIsErr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsErr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             switch (arch) {
                 else => return self.fail(inst.base.src, "TODO implement iserr for {}", .{self.target.cpu.arch}),
             }
         }
 
-        fn genIsErrPtr(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIsErrPtr(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             return self.fail(inst.base.src, "TODO load the operand and call genIsErr", .{});
         }
 
-        fn genErrorToInt(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genErrorToInt(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             return self.resolveInst(inst.operand);
         }
 
-        fn genIntToError(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genIntToError(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             return self.resolveInst(inst.operand);
         }
 
-        fn genLoop(self: *Self, inst: *ir.Inst.Loop) !MCValue {
+        fn genLoop(self: *Self, inst: *air.Inst.Loop) !MCValue {
             // A loop is a setup to be able to jump back to the beginning.
             const start_index = self.code.items.len;
             try self.genBody(inst.body);
@@ -3008,7 +3008,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genBlock(self: *Self, inst: *ir.Inst.Block) !MCValue {
+        fn genBlock(self: *Self, inst: *air.Inst.Block) !MCValue {
             try self.blocks.putNoClobber(self.gpa, inst, .{
                 // A block is a setup to be able to jump to the end.
                 .relocs = .{},
@@ -3029,7 +3029,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return @bitCast(MCValue, block_data.mcv);
         }
 
-        fn genSwitch(self: *Self, inst: *ir.Inst.SwitchBr) !MCValue {
+        fn genSwitch(self: *Self, inst: *air.Inst.SwitchBr) !MCValue {
             switch (arch) {
                 else => return self.fail(inst.base.src, "TODO genSwitch for {}", .{self.target.cpu.arch}),
             }
@@ -3065,21 +3065,21 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genBrBlockFlat(self: *Self, inst: *ir.Inst.BrBlockFlat) !MCValue {
+        fn genBrBlockFlat(self: *Self, inst: *air.Inst.BrBlockFlat) !MCValue {
             try self.genBody(inst.body);
             const last = inst.body.instructions[inst.body.instructions.len - 1];
             return self.br(inst.base.src, inst.block, last);
         }
 
-        fn genBr(self: *Self, inst: *ir.Inst.Br) !MCValue {
+        fn genBr(self: *Self, inst: *air.Inst.Br) !MCValue {
             return self.br(inst.base.src, inst.block, inst.operand);
         }
 
-        fn genBrVoid(self: *Self, inst: *ir.Inst.BrVoid) !MCValue {
+        fn genBrVoid(self: *Self, inst: *air.Inst.BrVoid) !MCValue {
             return self.brVoid(inst.base.src, inst.block);
         }
 
-        fn genBoolOp(self: *Self, inst: *ir.Inst.BinOp) !MCValue {
+        fn genBoolOp(self: *Self, inst: *air.Inst.BinOp) !MCValue {
             if (inst.base.isUnused())
                 return MCValue.dead;
             switch (arch) {
@@ -3099,7 +3099,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn br(self: *Self, src: LazySrcLoc, block: *ir.Inst.Block, operand: *ir.Inst) !MCValue {
+        fn br(self: *Self, src: LazySrcLoc, block: *air.Inst.Block, operand: *air.Inst) !MCValue {
             const block_data = self.blocks.getPtr(block).?;
 
             if (operand.ty.hasCodeGenBits()) {
@@ -3114,7 +3114,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return self.brVoid(src, block);
         }
 
-        fn brVoid(self: *Self, src: LazySrcLoc, block: *ir.Inst.Block) !MCValue {
+        fn brVoid(self: *Self, src: LazySrcLoc, block: *air.Inst.Block) !MCValue {
             const block_data = self.blocks.getPtr(block).?;
 
             // Emit a jump with a relocation. It will be patched up after the block ends.
@@ -3143,7 +3143,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return .none;
         }
 
-        fn genAsm(self: *Self, inst: *ir.Inst.Assembly) !MCValue {
+        fn genAsm(self: *Self, inst: *air.Inst.Assembly) !MCValue {
             if (!inst.is_volatile and inst.base.isUnused())
                 return MCValue.dead;
             switch (arch) {
@@ -4089,17 +4089,17 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             }
         }
 
-        fn genPtrToInt(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genPtrToInt(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             // no-op
             return self.resolveInst(inst.operand);
         }
 
-        fn genBitCast(self: *Self, inst: *ir.Inst.UnOp) !MCValue {
+        fn genBitCast(self: *Self, inst: *air.Inst.UnOp) !MCValue {
             const operand = try self.resolveInst(inst.operand);
             return operand;
         }
 
-        fn resolveInst(self: *Self, inst: *ir.Inst) !MCValue {
+        fn resolveInst(self: *Self, inst: *air.Inst) !MCValue {
             // If the type has no codegen bits, no need to store it.
             if (!inst.ty.hasCodeGenBits())
                 return MCValue.none;
@@ -4117,7 +4117,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
             return self.getResolvedInstValue(inst);
         }
 
-        fn getResolvedInstValue(self: *Self, inst: *ir.Inst) MCValue {
+        fn getResolvedInstValue(self: *Self, inst: *air.Inst) MCValue {
             // Treat each stack item as a "layer" on top of the previous one.
             var i: usize = self.branch_stack.items.len;
             while (true) {
@@ -4134,7 +4134,7 @@ fn Function(comptime arch: std.Target.Cpu.Arch) type {
         /// A potential opportunity for future optimization here would be keeping track
         /// of the fact that the instruction is available both as an immediate
         /// and as a register.
-        fn limitImmediateType(self: *Self, inst: *ir.Inst, comptime T: type) !MCValue {
+        fn limitImmediateType(self: *Self, inst: *air.Inst, comptime T: type) !MCValue {
             const mcv = try self.resolveInst(inst);
             const ti = @typeInfo(T).Int;
             switch (mcv) {

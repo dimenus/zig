@@ -12,8 +12,8 @@ const Decl = Module.Decl;
 const Type = @import("../type.zig").Type;
 const Value = @import("../value.zig").Value;
 const LazySrcLoc = Module.LazySrcLoc;
-const ir = @import("../air.zig");
-const Inst = ir.Inst;
+const air = @import("../air.zig");
+const Inst = air.Inst;
 
 pub const Word = u32;
 pub const ResultId = u32;
@@ -642,7 +642,7 @@ pub const DeclGen = struct {
         }
     }
 
-    fn genBody(self: *DeclGen, body: ir.Body) Error!void {
+    fn genBody(self: *DeclGen, body: air.Body) Error!void {
         for (body.instructions) |inst| {
             try self.genInst(inst);
         }
@@ -672,7 +672,7 @@ pub const DeclGen = struct {
             .br => return try self.genBr(inst.castTag(.br).?),
             .br_void => return try self.genBrVoid(inst.castTag(.br_void).?),
             // TODO: Breakpoints won't be supported in SPIR-V, but the compiler seems to insert them
-            // throughout the IR.
+            // throughout the air.
             .breakpoint => return,
             .condbr => return try self.genCondBr(inst.castTag(.condbr).?),
             .constant => unreachable,
@@ -833,10 +833,10 @@ pub const DeclGen = struct {
     }
 
     fn genBlock(self: *DeclGen, inst: *Inst.Block) !?ResultId {
-        // In IR, a block doesn't really define an entry point like a block, but more like a scope that breaks can jump out of and
+        // In air, a block doesn't really define an entry point like a block, but more like a scope that breaks can jump out of and
         // "return" a value from. This cannot be directly modelled in SPIR-V, so in a block instruction, we're going to split up
         // the current block by first generating the code of the block, then a label, and then generate the rest of the current
-        // ir.Block in a different SPIR-V block.
+        // air.Block in a different SPIR-V block.
 
         const label_id = self.spv.allocResultId();
 
@@ -902,7 +902,7 @@ pub const DeclGen = struct {
         // TODO: This instruction needs to be the last in a block. Is that guaranteed?
         const condition_id = try self.resolve(inst.condition);
 
-        // These will always generate a new SPIR-V block, since they are ir.Body and not ir.Block.
+        // These will always generate a new SPIR-V block, since they are air.Body and not air.Block.
         const then_label_id = self.spv.allocResultId();
         const else_label_id = self.spv.allocResultId();
 
