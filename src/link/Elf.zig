@@ -3448,6 +3448,15 @@ const CsuObjects = struct {
                     .static_pie  => result.set( "start_dyn.o", "crti.o", "crtbeginS.o", "crtendS.o", "crtn.o" ),
                     // zig fmt: on
                 },
+                .serenity => switch (mode) {
+                    // zig fmt: off
+                    .dynamic_lib => result.set( null,      "crti.o", "crtbeginS.o", "crtendS.o", "crtn.o" ),
+                    .dynamic_exe,
+                    .dynamic_pie => result.set( "crt0.o", "crti.o", "crtbeginS.o", "crtendS.o", "crtn.o" ),
+                    .static_exe  => result.set( "crt1.o",  "crti.o", "crtbeginT.o", "crtend.o",  "crtn.o" ),
+                    .static_pie  => result.set( "rcrt1.o", "crti.o", "crtbeginS.o", "crtendS.o", "crtn.o" ),
+                    // zig fmt: on
+                },
                 else => {},
             }
         }
@@ -3471,7 +3480,7 @@ const CsuObjects = struct {
                     if (result.crtbegin) |*obj| obj.* = try fs.path.join(arena, &[_][]const u8{ crt_dir_path, gccv, obj.* });
                     if (result.crtend) |*obj| obj.* = try fs.path.join(arena, &[_][]const u8{ crt_dir_path, gccv, obj.* });
                 },
-                .haiku => {
+                .serenity, .haiku => {
                     const gcc_dir_path = lci.gcc_dir orelse return error.LibCInstallationMissingCRTDir;
                     if (result.crt0) |*obj| obj.* = try fs.path.join(arena, &[_][]const u8{ crt_dir_path, obj.* });
                     if (result.crti) |*obj| obj.* = try fs.path.join(arena, &[_][]const u8{ crt_dir_path, obj.* });

@@ -1420,7 +1420,7 @@ pub const ModuleDebugInfo = switch (native_os) {
             };
         }
     },
-    .linux, .netbsd, .freebsd, .dragonfly, .openbsd, .haiku => struct {
+    .linux, .netbsd, .freebsd, .dragonfly, .openbsd, .haiku, .serenity => struct {
         base_address: usize,
         dwarf: DW.DwarfInfo,
         mapped_memory: []const u8,
@@ -1634,7 +1634,7 @@ fn handleSegfaultWindowsExtra(info: *windows.EXCEPTION_POINTERS, comptime msg: u
 
 pub fn dumpStackPointerAddr(prefix: []const u8) void {
     const sp = asm (""
-        : [argc] "={rsp}" (-> usize),
+        : [argc] "={rsp}" (-> usize)
     );
     std.debug.warn("{} sp = 0x{x}\n", .{ prefix, sp });
 }

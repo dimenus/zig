@@ -56,6 +56,7 @@ pub const Target = struct {
             glsl450,
             vulkan,
             plan9,
+            serenity,
             other,
 
             pub fn isDarwin(tag: Tag) bool {
@@ -259,6 +260,7 @@ pub const Target = struct {
                     .glsl450, // TODO: GLSL versions
                     .vulkan,
                     .plan9,
+                    .serenity,
                     .other,
                     => return .{ .none = {} },
 
@@ -385,6 +387,7 @@ pub const Target = struct {
                 .dragonfly,
                 .openbsd,
                 .haiku,
+                .serenity,
                 => true,
 
                 .linux,
@@ -513,6 +516,7 @@ pub const Target = struct {
                 .opencl, // TODO: SPIR-V ABIs with Linkage capability
                 .glsl450,
                 .vulkan,
+                .serenity,
                 .plan9, // TODO specify abi
                 => return .none,
             }
@@ -1651,6 +1655,8 @@ pub const Target = struct {
             .hermit,
             .hurd,
             => return result,
+
+            .serenity => return copy(&result, "/usr/lib/Loader.so"),
         }
     }
 

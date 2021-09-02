@@ -120,6 +120,7 @@ pub fn targetTriple(allocator: *Allocator, target: std.Target) ![:0]u8 {
         .glsl450,
         .vulkan,
         .plan9,
+        .serenity,
         .other,
         => "unknown",
     };

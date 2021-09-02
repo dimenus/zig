@@ -35,7 +35,7 @@ pub const Watch = @import("fs/watch.zig").Watch;
 /// fit into a UTF-8 encoded array of this length.
 /// The byte count includes room for a null sentinel byte.
 pub const MAX_PATH_BYTES = switch (builtin.os.tag) {
-    .linux, .macos, .ios, .freebsd, .netbsd, .dragonfly, .openbsd, .haiku => os.PATH_MAX,
+    .linux, .macos, .ios, .freebsd, .netbsd, .dragonfly, .openbsd, .haiku, .serenity => os.PATH_MAX,
     // Each UTF-16LE character may be expanded to 3 UTF-8 bytes.
     // If it would require 4 UTF-8 bytes, then there would be a surrogate
     // pair in the UTF-16LE, and we (over)account 3 bytes for it that way.
@@ -2440,7 +2440,7 @@ pub fn selfExePath(out_buffer: []u8) SelfExePathError![]u8 {
         return out_buffer[0..real_path.len];
     }
     switch (builtin.os.tag) {
-        .linux => return os.readlinkZ("/proc/self/exe", out_buffer),
+        .linux, .serenity => return os.readlinkZ("/proc/self/exe", out_buffer),
         .freebsd, .dragonfly => {
             var mib = [4]c_int{ os.CTL.KERN, os.KERN.PROC, os.KERN.PROC_PATHNAME, -1 };
             var out_len: usize = out_buffer.len;

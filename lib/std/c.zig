@@ -53,6 +53,7 @@ pub usingnamespace switch (builtin.os.tag) {
     .fuchsia => @import("c/fuchsia.zig"),
     .minix => @import("c/minix.zig"),
     .emscripten => @import("c/emscripten.zig"),
+    .serenity => @import("c/serenity.zig"),
     .wasi => @import("c/wasi.zig"),
     else => struct {},
 };

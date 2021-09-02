@@ -244,7 +244,7 @@ pub fn supportsStackProbing(target: std.Target) bool {
 
 pub fn osToLLVM(os_tag: std.Target.Os.Tag) llvm.OSType {
     return switch (os_tag) {
-        .freestanding, .other, .opencl, .glsl450, .vulkan, .plan9 => .UnknownOS,
+        .freestanding, .other, .opencl, .glsl450, .vulkan, .plan9, .serenity => .UnknownOS,
         .windows, .uefi => .Win32,
         .ananas => .Ananas,
         .cloudabi => .CloudABI,
@@ -438,6 +438,12 @@ pub fn libcFullLinkFlags(target: std.Target) []const []const u8 {
             "-lroot",
             "-lpthread",
             "-lc",
+        },
+        .serenity => &[_][]const u8{
+            "-lm",
+            "-lpthread",
+            "-lc",
+            "-ldl",
         },
         else => switch (target.abi) {
             .android => &[_][]const u8{
