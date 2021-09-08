@@ -636,7 +636,12 @@ pub const DwarfInfo = struct {
             const next_offset = unit_length + (if (is_64) @as(usize, 12) else @as(usize, 4));
 
             const version = try in.readInt(u16, di.endian);
-            if (version < 2 or version > 5) return error.InvalidDebugInfo;
+
+            //NOTE: DWARFv5 has breaking changes: http://www.dwarfstd.org/doc/DWARF5.pdf
+            if (version < 2 or version > 4) {
+                std.log.debug("DWARF v{} is not supported", .{version});
+                return error.UnsupportedDebugInfo;
+            }
 
             const debug_abbrev_offset = if (is_64) try in.readInt(u64, di.endian) else try in.readInt(u32, di.endian);
 
@@ -740,7 +745,7 @@ pub const DwarfInfo = struct {
             const next_offset = unit_length + (if (is_64) @as(usize, 12) else @as(usize, 4));
 
             const version = try in.readInt(u16, di.endian);
-            if (version < 2 or version > 5) return error.InvalidDebugInfo;
+            if (version < 2 or version > 5) return error.UnsupportedDebugInfo;
 
             const debug_abbrev_offset = if (is_64) try in.readInt(u64, di.endian) else try in.readInt(u32, di.endian);
 
